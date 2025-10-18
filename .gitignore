@@ -1,0 +1,19 @@
+# Work files
+WIP/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Python/virtual envs (if any)
+venv/
+.env/
+
+# Logs
+*.log
+
+# Editors
+.vscode/
+.idea/
