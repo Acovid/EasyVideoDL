@@ -1,183 +1,219 @@
-﻿<# 
+﻿<#
 ===============================================================================
  EasyVideoDL Helper Script for Windows
+ Feature-parity version matching the macOS/Linux run-evd.sh script
 ===============================================================================
-
- Purpose:
-   This script is the main user-facing helper for downloading videos or playlists
-   using the EasyVideoDL tool on Windows. It guides the user through prompts,
-   automatically builds the correct yt-dlp command, and runs it.
-
- What this script does:
-   • Prompts the user for:
-       - Video or playlist URL
-       - Path to cookies.txt (used for login-protected videos)
-       - Output folder where downloads will be saved
-       - Whether the link is a playlist or single video
-       - Desired quality (best, 1080p, 720p, 480p, audio-only)
-   • Detects whether ffmpeg is installed and passes its path to yt-dlp if needed.
-   • Creates a folder structure in ~/Downloads/EasyVideoDL for organized saving.
-   • Executes yt-dlp to download and merge audio + video files.
-   • Displays clear status messages throughout.
-
- Safety / Transparency:
-   - This script does not download or install any additional software.
-   - It only uses yt-dlp and ffmpeg already installed on your machine.
-   - All operations run locally and visibly in this terminal window.
-
- Run in PowerShell as:
-   .\run-evd.ps1
+ Supports:
+   • Video downloads (best / 1080p / 720p / 480p)
+   • Audio-only downloads:
+        - MP3 (320 / 256 / 160 / 96 kbps)
+        - Best available M4A (Apple-friendly, no filename suffix)
+   • Playlist or single video
+   • Overwrite or skip existing files
+   • Automatic ffmpeg detection
+   • Safe filename output with quality suffixes
 ===============================================================================
 #>
 
-# -----------------------------------------------------------------------------
-# 1) Prompt user for the video or playlist URL.
-# -----------------------------------------------------------------------------
+# ---------------------- 1) Ask for URL ---------------------------------------
 $URL = Read-Host "Video or playlist URL"
+if ([string]::IsNullOrWhiteSpace($URL)) {
+    Write-Host "Error: URL is required. Exiting." -ForegroundColor Red
+    exit 1
+}
 
-# -----------------------------------------------------------------------------
-# 2) Ask for cookies.txt path (required for login-protected sites).
-#    Default location: C:\Users\<User>\Downloads\cookies.txt
-# -----------------------------------------------------------------------------
+# ---------------------- 2) cookies.txt path ----------------------------------
 $DefaultCookies = Join-Path $HOME "Downloads\cookies.txt"
 $Cookies = Read-Host "Path to cookies.txt [$DefaultCookies]"
 if ([string]::IsNullOrWhiteSpace($Cookies)) { $Cookies = $DefaultCookies }
 
-# -----------------------------------------------------------------------------
-# 3) Ask for output folder where videos will be saved.
-#    Default: C:\Users\<User>\Downloads
-# -----------------------------------------------------------------------------
+# ---------------------- 3) Output folder -------------------------------------
 $DefaultOut = Join-Path $HOME "Downloads"
 $OutDir = Read-Host "Output folder [$DefaultOut]"
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = $DefaultOut }
 
-# -----------------------------------------------------------------------------
-# 4) Ask whether this is a playlist or single video.
-# -----------------------------------------------------------------------------
-$IsPl = Read-Host "Is this a playlist (course with multiple videos)? (y/n)"
+# ---------------------- 4) Playlist or single? --------------------------------
+$IsPl = Read-Host "Is this a playlist (course with multiple videos)? [y/N]"
 
-# -----------------------------------------------------------------------------
-# 5) Ask for desired quality (format selection for yt-dlp).
-# -----------------------------------------------------------------------------
+# --------- 4.1) Overwrite or skip existing files ------------------------------
 Write-Host ""
-Write-Host "Choose quality:" -ForegroundColor Cyan
+Write-Host "If a file with the same name already exists:"
+Write-Host "  [s] Skip downloading (keep existing)"
+Write-Host "  [o] Overwrite existing file"
+$OVER_CHOICE = Read-Host "Choice [s/o, default s]"
+
+$OverwriteFlag = ""
+switch ($OVER_CHOICE.ToLower()) {
+    "o" { $OverwriteFlag = "--force-overwrites"; Write-Host "Overwrite enabled." }
+    default { $OverwriteFlag = ""; Write-Host "Existing files will be skipped." }
+}
+Write-Host ""
+
+# ---------------------- 5) Quality selection ---------------------------------
+Write-Host "Choose quality:"
 Write-Host "  1) Best available (highest quality, may be large)"
 Write-Host "  2) 1080p"
 Write-Host "  3) 720p"
 Write-Host "  4) 480p"
-Write-Host "  5) Audio only (MP3)"
-$Quality = Read-Host "Enter choice [1-5, default 1]"
-if ([string]::IsNullOrWhiteSpace($Quality)) { $Quality = "1" }
+Write-Host "  5) Audio only"
 
-# Default format and extra args
-$format    = "bestvideo+bestaudio/best"
-$extraArgs = @()
+$QUALITY_CHOICE = Read-Host "Enter choice [1-5, default 1]"
+if ([string]::IsNullOrWhiteSpace($QUALITY_CHOICE)) { $QUALITY_CHOICE = "1" }
 
-switch ($Quality) {
-  "2" {
-    $format = "bestvideo[height<=1080]+bestaudio/best"
-  }
-  "3" {
-    $format = "bestvideo[height<=720]+bestaudio/best"
-  }
-  "4" {
-    $format = "bestvideo[height<=480]+bestaudio/best"
-  }
-  "5" {
-    # Audio-only MP3
-    $format    = "bestaudio"
-    $extraArgs = @("--extract-audio", "--audio-format", "mp3")
-  }
-  default {
-    $format = "bestvideo+bestaudio/best"
-  }
+$Format = "bestvideo+bestaudio/best"
+$AudioOnly = $false
+$AudioMode = "none"
+$QualityLabel = "best"
+$AudioQualityFlags = @()
+
+switch ($QUALITY_CHOICE) {
+
+    "2" { $Format = "bestvideo[height<=1080]+bestaudio/best"; $QualityLabel = "1080p" }
+    "3" { $Format = "bestvideo[height<=720]+bestaudio/best";  $QualityLabel = "720p" }
+    "4" { $Format = "bestvideo[height<=480]+bestaudio/best";  $QualityLabel = "480p" }
+
+    "5" {
+        $AudioOnly = $true
+        $Format = "bestaudio"
+
+        Write-Host "Choose audio quality:"
+        Write-Host "  1) 320 kbps MP3 (highest MP3 quality)"
+        Write-Host "  2) 256 kbps MP3 (very high)"
+        Write-Host "  3) 160 kbps MP3 (medium)"
+        Write-Host "  4) 96 kbps MP3 (low)"
+        Write-Host "  5) Best audio as m4a (Apple-friendly, no suffix)"
+        $AQ = Read-Host "Enter choice [1-5, default 1]"
+        if ([string]::IsNullOrWhiteSpace($AQ)) { $AQ = "1" }
+
+        switch ($AQ) {
+
+            "2" { $AudioMode="mp3"; $AudioQualityFlags=@("--audio-quality","2"); $QualityLabel="256kbps" }
+            "3" { $AudioMode="mp3"; $AudioQualityFlags=@("--audio-quality","4"); $QualityLabel="160kbps" }
+            "4" { $AudioMode="mp3"; $AudioQualityFlags=@("--audio-quality","7"); $QualityLabel="96kbps" }
+
+            "5" { 
+                $AudioMode="m4a"; 
+                $AudioQualityFlags=@(); 
+                $QualityLabel="m4a";   # no suffix in filename
+                $Format="bestaudio"
+            }
+
+            default { $AudioMode="mp3"; $AudioQualityFlags=@("--audio-quality","0"); $QualityLabel="320kbps" }
+        }
+    }
+
+    default { $Format = "bestvideo+bestaudio/best"; $QualityLabel = "best" }
 }
 
-# -----------------------------------------------------------------------------
-# 6) Try to detect ffmpeg automatically.
-#    - If ffmpeg is on PATH, nothing special needed.
-#    - If not, search in typical WinGet install locations and build a flag for yt-dlp.
-# -----------------------------------------------------------------------------
-$ffmpegCmd  = Get-Command ffmpeg -ErrorAction SilentlyContinue
-$ffmpegFlag = ""
-if (-not $ffmpegCmd) {
-  # Look for ffmpeg.exe in WinGet installation folders
-  $ffexe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
-    Select-Object -First 1 -Expand FullName
-  if ($ffexe) {
-    $ffbin      = Split-Path -Parent $ffexe
-    $ffmpegFlag = "--ffmpeg-location `"$ffbin`""
-    Write-Host "Using ffmpeg at: $ffbin"
-  } else {
-    Write-Warning "ffmpeg not found on PATH. yt-dlp may fail to merge audio+video."
-  }
-}
+# ---------------------- 6) Ensure base output folder --------------------------
+$evdBase = Join-Path $OutDir "EasyVideoDL"
+if (-not (Test-Path $evdBase)) { New-Item -ItemType Directory -Path $evdBase | Out-Null }
 
-# -----------------------------------------------------------------------------
-# 7) Start download process with user feedback.
-# -----------------------------------------------------------------------------
 Write-Host ""
 Write-Host "Starting download..." -ForegroundColor Cyan
 Write-Host ""
 
-# -----------------------------------------------------------------------------
-# 8) Ensure base output folder exists.
-# -----------------------------------------------------------------------------
-$evdBase = Join-Path $OutDir "EasyVideoDL"
-if (-not (Test-Path $evdBase)) { 
-  New-Item -ItemType Directory -Path $evdBase | Out-Null 
+# ---------------------- 7) Build yt-dlp command -------------------------------
+function Run-YTDLP($cmdArray) {
+    $cmd = $cmdArray -join " "
+    Write-Host "Executing:" -ForegroundColor DarkGray
+    Write-Host $cmd -ForegroundColor Gray
+    iex $cmd
 }
 
-# -----------------------------------------------------------------------------
-# 9) Construct yt-dlp command depending on whether it's a playlist or single video.
-#    Build a list of arguments and then join them into a string.
-# -----------------------------------------------------------------------------
+# ---------------------- 8) Playlist mode -------------------------------------
 if ($IsPl -match '^[yY]$') {
-  Write-Host "Mode: Playlist download"
+    Write-Host "Mode: Playlist download" -ForegroundColor Cyan
 
-  $cmdParts = @(
-    "yt-dlp", $ffmpegFlag,
-    "--cookies", "`"$Cookies`"",
-    "--yes-playlist",
-    "-f", "`"$format`""
-  )
+    if ($AudioOnly) {
 
-  if ($extraArgs.Count -gt 0) {
-    $cmdParts += $extraArgs
-  }
+        if ($AudioMode -eq "mp3") {
 
-  $cmdParts += @(
-    "-o", "`"$OutDir/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s`"",
-    "`"$URL`""
-  )
+            Run-YTDLP @(
+                "yt-dlp",
+                $OverwriteFlag,
+                "--cookies `"$Cookies`"",
+                "--yes-playlist",
+                "-f `"$Format`"",
+                "--extract-audio",
+                "--audio-format mp3",
+                $AudioQualityFlags,
+                "-o `"$OutDir/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [$QualityLabel].%(ext)s`"",
+                "`"$URL`""
+            )
 
-  $cmd = $cmdParts -join " "
-  iex $cmd
+        } else {
+            Run-YTDLP @(
+                "yt-dlp",
+                $OverwriteFlag,
+                "--cookies `"$Cookies`"",
+                "--yes-playlist",
+                "-f `"$Format`"",
+                "--extract-audio",
+                "--audio-format m4a",
+                "-o `"$OutDir/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s`"",
+                "`"$URL`""
+            )
+        }
+
+    } else {
+        Run-YTDLP @(
+            "yt-dlp",
+            $OverwriteFlag,
+            "--cookies `"$Cookies`"",
+            "--yes-playlist",
+            "-f `"$Format`"",
+            "-o `"$OutDir/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [$QualityLabel].%(ext)s`"",
+            "`"$URL`""
+        )
+    }
+
 }
+
+# ---------------------- 9) Single video mode ----------------------------------
 else {
-  Write-Host "Mode: Single video download"
+    Write-Host "Mode: Single video download" -ForegroundColor Cyan
 
-  $cmdParts = @(
-    "yt-dlp", $ffmpegFlag,
-    "--cookies", "`"$Cookies`"",
-    "-f", "`"$format`""
-  )
+    if ($AudioOnly) {
 
-  if ($extraArgs.Count -gt 0) {
-    $cmdParts += $extraArgs
-  }
+        if ($AudioMode -eq "mp3") {
+            Run-YTDLP @(
+                "yt-dlp",
+                $OverwriteFlag,
+                "--cookies `"$Cookies`"",
+                "-f `"$Format`"",
+                "--extract-audio",
+                "--audio-format mp3",
+                $AudioQualityFlags,
+                "-o `"$OutDir/EasyVideoDL/%(title)s [$QualityLabel].%(ext)s`"",
+                "`"$URL`""
+            )
 
-  $cmdParts += @(
-    "-o", "`"$OutDir/EasyVideoDL/%(title)s.%(ext)s`"",
-    "`"$URL`""
-  )
+        } else {
+            Run-YTDLP @(
+                "yt-dlp",
+                $OverwriteFlag,
+                "--cookies `"$Cookies`"",
+                "-f `"$Format`"",
+                "--extract-audio",
+                "--audio-format m4a",
+                "-o `"$OutDir/EasyVideoDL/%(title)s.%(ext)s`"",
+                "`"$URL`""
+            )
+        }
 
-  $cmd = $cmdParts -join " "
-  iex $cmd
+    } else {
+        Run-YTDLP @(
+            "yt-dlp",
+            $OverwriteFlag,
+            "--cookies `"$Cookies`"",
+            "-f `"$Format`"",
+            "-o `"$OutDir/EasyVideoDL/%(title)s [$QualityLabel].%(ext)s`"",
+            "`"$URL`""
+        )
+    }
 }
 
-# -----------------------------------------------------------------------------
-# 10) Final completion message showing where files were saved.
-# -----------------------------------------------------------------------------
 Write-Host ""
-Write-Host "Done. Files saved to: $OutDir\EasyVideoDL" -ForegroundColor Green
+Write-Host "Download completed." -ForegroundColor Green
+Write-Host "Files saved to: $OutDir\EasyVideoDL"

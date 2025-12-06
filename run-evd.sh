@@ -34,8 +34,28 @@ read -r -p "Output folder [${DEFAULT_OUT}]: " OUTDIR
 OUTDIR="${OUTDIR:-$DEFAULT_OUT}"
 
 # 4) Playlist or single video? -----------------------------------------------
-echo "Is this a playlist (course with multiple videos)? (y/n)"
+echo "Is this a playlist (course with multiple videos)? [y/N]"
 read -r IS_PL
+
+# 4.1) Overwrite or skip existing files? --------------------------------------
+echo
+echo "If a file with the same name already exists:"
+echo "  [s] Skip downloading (keep existing file)"
+echo "  [o] Overwrite existing file"
+read -r -p "Choice [s/o, default s]: " OVER_CHOICE
+
+OVERWRITE_FLAG=""
+case "$OVER_CHOICE" in
+  o|O)
+    OVERWRITE_FLAG="--force-overwrites"
+    echo "Existing files will be overwritten if present."
+    ;;
+  *)
+    OVERWRITE_FLAG=""
+    echo "Existing files will be kept; yt-dlp will skip them if they already exist."
+    ;;
+esac
+echo
 
 # 5) Quality choice (video vs audio-only) ------------------------------------
 echo "Choose quality:"
@@ -125,21 +145,21 @@ if [[ "${IS_PL}" == "y" || "${IS_PL}" == "Y" ]]; then
 
   if [[ "$AUDIO_ONLY" -eq 1 ]]; then
     if [[ "$AUDIO_MODE" == "mp3" ]]; then
-      yt-dlp --cookies "$COOKIES" --yes-playlist \
+      yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
         -f "$FORMAT" \
         --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
         -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
         "$URL"
     else
       # m4a mode (no suffix)
-      yt-dlp --cookies "$COOKIES" --yes-playlist \
+      yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
         -f "$FORMAT" \
         --extract-audio --audio-format m4a \
         -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s" \
         "$URL"
     fi
   else
-    yt-dlp --cookies "$COOKIES" --yes-playlist \
+    yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
       -f "$FORMAT" \
       -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
       "$URL"
@@ -149,21 +169,21 @@ else
 
   if [[ "$AUDIO_ONLY" -eq 1 ]]; then
     if [[ "$AUDIO_MODE" == "mp3" ]]; then
-      yt-dlp --cookies "$COOKIES" \
+      yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
         -f "$FORMAT" \
         --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
         -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
         "$URL"
     else
       # m4a mode (no suffix)
-      yt-dlp --cookies "$COOKIES" \
+      yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
         -f "$FORMAT" \
         --extract-audio --audio-format m4a \
         -o "${OUTDIR}/EasyVideoDL/%(title)s.%(ext)s" \
         "$URL"
     fi
   else
-    yt-dlp --cookies "$COOKIES" \
+    yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
       -f "$FORMAT" \
       -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
       "$URL"
