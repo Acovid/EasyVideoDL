@@ -3,84 +3,173 @@
 # EasyVideoDL Helper Script (macOS / Linux)
 # =============================================================================
 # Purpose:
-#   This script guides the user through downloading a video or playlist
-#   using yt-dlp. It handles user input (URL, cookies, output folder) and 
-#   constructs the correct yt-dlp command automatically.
+#   Interactive helper for downloading videos or playlists using yt-dlp.
+#   Supports:
+#     - Video: best / 1080p / 720p / 480p
+#     - Audio only: MP3 (320/256/160/96 kbps) or best M4A (Apple-friendly)
 #
-# What it does:
-#   1) Prompts the user for:
-#        - Video or playlist URL
-#        - Path to cookies.txt (for login-protected sites)
-#        - Output folder for downloaded videos
-#        - Whether the link is a single video or a playlist
-#   2) Runs yt-dlp with appropriate options to download and merge video + audio.
-#   3) Saves the resulting files inside ~/Downloads/EasyVideoDL.
-#
-# Safety / Transparency:
-#   - No external downloads or network actions other than the video URLs you provide.
-#   - All commands (yt-dlp) are open-source and run locally on your system.
-#   - You can review, modify, or audit every line of this script.
-#
-# Usage:
-#   chmod +x ./run-evd.sh
-#   ./run-evd.sh
+# Output naming:
+#   Video: "Title [QUALITY].ext"
+#   Audio MP3: "Title [320kbps].mp3" (etc.)
+#   Audio M4A (best): "Title.m4a"   (no suffix)
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# 1) Enable strict mode:
-#    -e : exit immediately if any command fails
-#    -u : treat unset variables as errors
-#    -o pipefail : ensure pipeline errors are caught
-# -----------------------------------------------------------------------------
 set -euo pipefail
 
-# -----------------------------------------------------------------------------
-# 2) Ask the user for the video or playlist URL.
-# -----------------------------------------------------------------------------
+# 1) Ask for URL ---------------------------------------------------------------
 read -r -p "Video or playlist URL: " URL
+if [[ -z "${URL}" ]]; then
+  echo "Error: URL is required. Exiting."
+  exit 1
+fi
 
-# -----------------------------------------------------------------------------
-# 3) Ask for the path to cookies.txt (used for login-protected sites).
-#    Default location is ~/Downloads/cookies.txt.
-# -----------------------------------------------------------------------------
+# 2) cookies.txt path ---------------------------------------------------------
 DEFAULT_COOKIES="$HOME/Downloads/cookies.txt"
 read -r -p "Path to cookies.txt [${DEFAULT_COOKIES}]: " COOKIES
 COOKIES="${COOKIES:-$DEFAULT_COOKIES}"
 
-# -----------------------------------------------------------------------------
-# 4) Ask for the output folder (where files will be saved).
-#    Default is ~/Downloads.
-# -----------------------------------------------------------------------------
+# 3) Output folder ------------------------------------------------------------
 DEFAULT_OUT="$HOME/Downloads"
 read -r -p "Output folder [${DEFAULT_OUT}]: " OUTDIR
 OUTDIR="${OUTDIR:-$DEFAULT_OUT}"
 
-# -----------------------------------------------------------------------------
-# 5) Ask whether this is a playlist (multiple videos) or a single video.
-# -----------------------------------------------------------------------------
+# 4) Playlist or single video? -----------------------------------------------
 echo "Is this a playlist (course with multiple videos)? (y/n)"
 read -r IS_PL
 
-# -----------------------------------------------------------------------------
-# 6) Based on the answer, run yt-dlp with appropriate options.
-#    - "--cookies" : uses exported browser cookies
-#    - "-f bestvideo+bestaudio/best" : ensures highest available quality
-#    - "-o ..." : defines structured output folder naming
-# -----------------------------------------------------------------------------
+# 5) Quality choice (video vs audio-only) ------------------------------------
+echo "Choose quality:"
+echo "  1) Best available (highest quality, may be large)"
+echo "  2) 1080p"
+echo "  3) 720p"
+echo "  4) 480p"
+echo "  5) Audio only"
+read -r -p "Enter choice [1-5, default 1]: " QUALITY_CHOICE
+QUALITY_CHOICE="${QUALITY_CHOICE:-1}"
+
+FORMAT="bestvideo+bestaudio/best"
+AUDIO_ONLY=0
+AUDIO_MODE="none"   # "mp3" or "m4a"
+QUALITY_LABEL="best"
+AUDIO_QUALITY_FLAGS=()
+
+case "$QUALITY_CHOICE" in
+  2)
+    FORMAT="bestvideo[height<=1080]+bestaudio/best"
+    QUALITY_LABEL="1080p"
+    ;;
+  3)
+    FORMAT="bestvideo[height<=720]+bestaudio/best"
+    QUALITY_LABEL="720p"
+    ;;
+  4)
+    FORMAT="bestvideo[height<=480]+bestaudio/best"
+    QUALITY_LABEL="480p"
+    ;;
+  5)
+    AUDIO_ONLY=1
+    FORMAT="bestaudio"
+    echo "Choose audio quality:"
+    echo "  1) 320 kbps MP3 (highest MP3 quality)"
+    echo "  2) 256 kbps MP3 (very high)"
+    echo "  3) 160 kbps MP3 (medium)"
+    echo "  4) 96 kbps MP3 (low)"
+    echo "  5) Best audio as m4a (Apple-friendly, may re-encode)"
+    read -r -p "Enter choice [1-5, default 1]: " AQ
+    AQ="${AQ:-1}"
+
+    case "$AQ" in
+      2)
+        AUDIO_MODE="mp3"
+        AUDIO_QUALITY_FLAGS=(--audio-quality 2)
+        QUALITY_LABEL="256kbps"
+        ;;
+      3)
+        AUDIO_MODE="mp3"
+        AUDIO_QUALITY_FLAGS=(--audio-quality 4)
+        QUALITY_LABEL="160kbps"
+        ;;
+      4)
+        AUDIO_MODE="mp3"
+        AUDIO_QUALITY_FLAGS=(--audio-quality 7)
+        QUALITY_LABEL="96kbps"
+        ;;
+      5)
+        AUDIO_MODE="m4a"
+        AUDIO_QUALITY_FLAGS=()
+        QUALITY_LABEL="m4a"   # label not used in filename for m4a
+        FORMAT="bestaudio"
+        ;;
+      *)
+        AUDIO_MODE="mp3"
+        AUDIO_QUALITY_FLAGS=(--audio-quality 0)
+        QUALITY_LABEL="320kbps"
+        ;;
+    esac
+    ;;
+  *)
+    FORMAT="bestvideo+bestaudio/best"
+    QUALITY_LABEL="best"
+    ;;
+esac
+
+# 6) Ensure base output folder exists ----------------------------------------
+mkdir -p "${OUTDIR}/EasyVideoDL"
+
+echo "Starting download..."
+echo
+
+# 7) Build yt-dlp command based on playlist/single & audio/video -------------
 if [[ "${IS_PL}" == "y" || "${IS_PL}" == "Y" ]]; then
-  echo "Downloading playlist..."
-  yt-dlp --cookies "$COOKIES" --yes-playlist -f "bestvideo+bestaudio/best" \
-    -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s" \
-    "$URL"
+  echo "Mode: Playlist download"
+
+  if [[ "$AUDIO_ONLY" -eq 1 ]]; then
+    if [[ "$AUDIO_MODE" == "mp3" ]]; then
+      yt-dlp --cookies "$COOKIES" --yes-playlist \
+        -f "$FORMAT" \
+        --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
+        -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
+        "$URL"
+    else
+      # m4a mode (no suffix)
+      yt-dlp --cookies "$COOKIES" --yes-playlist \
+        -f "$FORMAT" \
+        --extract-audio --audio-format m4a \
+        -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s" \
+        "$URL"
+    fi
+  else
+    yt-dlp --cookies "$COOKIES" --yes-playlist \
+      -f "$FORMAT" \
+      -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
+      "$URL"
+  fi
 else
-  echo "Downloading single video..."
-  yt-dlp --cookies "$COOKIES" -f "bestvideo+bestaudio/best" \
-    -o "${OUTDIR}/EasyVideoDL/%(title)s.%(ext)s" \
-    "$URL"
+  echo "Mode: Single video download"
+
+  if [[ "$AUDIO_ONLY" -eq 1 ]]; then
+    if [[ "$AUDIO_MODE" == "mp3" ]]; then
+      yt-dlp --cookies "$COOKIES" \
+        -f "$FORMAT" \
+        --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
+        -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
+        "$URL"
+    else
+      # m4a mode (no suffix)
+      yt-dlp --cookies "$COOKIES" \
+        -f "$FORMAT" \
+        --extract-audio --audio-format m4a \
+        -o "${OUTDIR}/EasyVideoDL/%(title)s.%(ext)s" \
+        "$URL"
+    fi
+  else
+    yt-dlp --cookies "$COOKIES" \
+      -f "$FORMAT" \
+      -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
+      "$URL"
+  fi
 fi
 
-# -----------------------------------------------------------------------------
-# 7) Print success message with download location.
-# -----------------------------------------------------------------------------
-echo "Download completed successfully."
+echo
+echo "Download completed."
 echo "Files saved to: $OUTDIR/EasyVideoDL"
