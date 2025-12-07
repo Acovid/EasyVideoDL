@@ -64,23 +64,15 @@ if [ ! -x "./run-evd.sh" ]; then
   fi
 fi
 
-# 6) Run the main EasyVideoDL helper
-./run-evd.sh
+# 6) Hand over completely to run-evd.sh in THIS SAME WINDOW
+#    `exec` replaces this shell with run-evd.sh, so there is only one process.
+exec ./run-evd.sh
+
+# If exec fails for some reason, we end up here:
 STATUS=$?
-
-# 7) Closing summary
 echo
 echo "=============================================="
-if [ $STATUS -eq 0 ]; then
-  echo " EasyVideoDL finished successfully."
-else
-  echo " EasyVideoDL finished with exit status: $STATUS"
-fi
-echo " You can scroll up to review all details above."
-echo " Downloaded files (by default) are in:"
-echo "   ~/Downloads/EasyVideoDL/"
+echo " EasyVideoDL finished with exit status: $STATUS"
 echo "=============================================="
 echo
-
-# 8) Keep terminal window open until user acknowledges
 read -r -p "Press ENTER to close this window..." _
