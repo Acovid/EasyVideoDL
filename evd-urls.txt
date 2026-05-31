@@ -28,6 +28,5 @@
 # ===============================================
 # Add your URLs below this line:
 
-https://example.com/video-1
-https://example.com/video-2
-# https://example.com/temporarily-disabled-video
+https://www.youtube.com/watch?v=9on5PnWPlk4&t=584s
+https://www.youtube.com/watch?v=gFka_huRM38

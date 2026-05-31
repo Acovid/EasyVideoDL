@@ -12,19 +12,20 @@
 
 ## 📖 **Table of Contents**
 
-1. 🎬 What Is EasyVideoDL?  
-2. ⚡ Quick Start Summary (for Experienced Users)  
-3. ⚙️ Basic Installation  
-   - 3.1 💡 Automatic Installation (Recommended)  
-   - 3.2 🧰 Manual Installation (Alternative)  
-4. 🍪 Installation Required for Login-Protected Sites: Browser Cookie Extension  
-5. 📁 Project Directory Structure (CLI + GUI Architecture)  
-6. ▶️ Running EasyVideoDL  
-7. 🧹 Uninstalling EasyVideoDL  
-8. 🎓 Example Commands (for Advanced Users)  
-9. 🧩 Troubleshooting & Common Issues  
-10. 📚 Official Resources  
-11. 🧾 License  
+1. 🎬 What Is EasyVideoDL?
+2. ⚡ Quick Start Summary (for Experienced Users)
+3. ⚙️ Basic Installation
+   - 3.1 💡 Automatic Installation (Recommended)
+   - 3.2 🧰 Manual Installation (Alternative)
+4. 🔄 Updating yt-dlp
+5. 🍪 Installation Required for Login-Protected Sites: Browser Cookie Extension
+6. 📁 Project Directory Structure (CLI + GUI Architecture)
+7. ▶️ Running EasyVideoDL
+8. 🧹 Uninstalling EasyVideoDL
+9. 🎓 Example Commands (for Advanced Users)
+10. 🧩 Troubleshooting & Common Issues
+11. 📚 Official Resources
+12. 🧾 License
 
 
 ---
@@ -112,7 +113,113 @@ ffmpeg -version
 
 ---
 
-## **4. 🍪 Installation Required for Login-Protected Sites**
+## **4. 🔄 Updating yt-dlp**
+
+yt-dlp is actively maintained because video websites frequently change how they deliver content.
+
+If EasyVideoDL displays a warning similar to:
+
+```
+WARNING: Your yt-dlp version is older than 90 days!
+It is strongly recommended to always use the latest version.
+```
+
+you should update yt-dlp to the latest version.
+
+---
+
+### **4.1 Check Your Current Version**
+
+macOS, Linux, or Windows:
+
+```bash
+yt-dlp --version
+```
+
+or in PowerShell:
+
+```powershell
+yt-dlp --version
+```
+
+---
+
+### **4.2 Updating on macOS**
+
+If you installed yt-dlp using the EasyVideoDL installer or Homebrew:
+
+```bash
+brew update
+brew upgrade yt-dlp
+```
+
+Verify:
+
+```bash
+yt-dlp --version
+```
+
+---
+
+### **4.3 Updating on Windows**
+
+If you installed yt-dlp using winget:
+
+```powershell
+winget upgrade yt-dlp.yt-dlp
+```
+
+Verify:
+
+```powershell
+yt-dlp --version
+```
+
+---
+
+### **4.4 Updating a pip Installation**
+
+Some users install yt-dlp using Python's package manager (pip).
+
+Update it with:
+
+```bash
+pip install --upgrade yt-dlp
+```
+
+or:
+
+```bash
+python -m pip install --upgrade yt-dlp
+```
+
+Verify:
+
+```bash
+yt-dlp --version
+```
+
+---
+
+### **4.5 Why Updates Matter**
+
+Video platforms frequently modify their websites.
+
+Keeping yt-dlp updated helps ensure:
+
+- Better compatibility with video platforms
+- Fewer download failures
+- Improved playlist support
+- Security and bug fixes
+- Support for newly added websites
+
+> 💡 As a general rule, if downloads suddenly stop working, updating yt-dlp should be one of the first troubleshooting steps.
+
+---
+
+
+
+## **5. 🍪 Installation Required for Login-Protected Sites**
 
 Many platforms require your browser **session cookies** to access videos.
 
@@ -136,7 +243,7 @@ Many platforms require your browser **session cookies** to access videos.
 
 ---
 
-## **5. 📁 Project Directory Structure (CLI + GUI Architecture)**
+## **6. 📁 Project Directory Structure (CLI + GUI Architecture)**
 
 EasyVideoDL now contains two subsystems:
 
@@ -209,7 +316,7 @@ Shared logic across CLI and GUI (path utilities, validation, helpers).
 
 ---
 
-## **6. ▶️ Running EasyVideoDL**
+## **7. ▶️ Running EasyVideoDL**
 
 EasyVideoDL can be used in **two ways**:
 
@@ -220,7 +327,7 @@ You choose the mode **when the program starts**.
 
 ---
 
-### **6.1 Running on macOS**
+### **7.1 Running on macOS**
 
 ```bash
 chmod +x ./run-evd.sh
@@ -229,7 +336,7 @@ chmod +x ./run-evd.sh
 
 ---
 
-### **6.2 Running on Windows (PowerShell)**
+### **7.2 Running on Windows (PowerShell)**
 
 ```powershell
 .\run-evd.ps1
@@ -237,7 +344,7 @@ chmod +x ./run-evd.sh
 
 ---
 
-### **6.3 Mode Selection**
+### **7.3 Mode Selection**
 
 When EasyVideoDL starts, you will first be asked to choose how you want to provide URLs:
 
@@ -265,7 +372,7 @@ https://example.com/video-3
 
 ---
 
-### **6.4 Questions Asked by EasyVideoDL**
+### **7.4 Questions Asked by EasyVideoDL**
 
 Regardless of mode, EasyVideoDL will guide you through the following choices:
 
@@ -285,7 +392,7 @@ Regardless of mode, EasyVideoDL will guide you through the following choices:
 
 ---
 
-### **6.5 Output Location**
+### **7.5 Output Location**
 
 Downloaded files are organized automatically under:
 
@@ -320,7 +427,7 @@ This log records:
 
 ---
 
-## **7. 🧹 Uninstalling EasyVideoDL**
+## **8. 🧹 Uninstalling EasyVideoDL**
 
 ### macOS
 
@@ -338,7 +445,7 @@ chmod +x ./uninstall-evd.sh
 
 ---
 
-## **8. 🎓 Example Commands (for Advanced Users)**
+## **9. 🎓 Example Commands (for Advanced Users)**
 
 ```bash
 # Single video
@@ -357,7 +464,7 @@ yt-dlp --cookies cookies.txt --yes-playlist \
 
 ---
 
-## **9. 🧩 Troubleshooting & Common Issues**
+## **10. 🧩 Troubleshooting & Common Issues**
 
 ### ⚠️ Two files appear (video-only + audio-only)
 
@@ -393,7 +500,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';'
 
 ---
 
-## **10. 📚 Official Resources**
+## **11. 📚 Official Resources**
 
 - yt-dlp → https://github.com/yt-dlp/yt-dlp  
 - ffmpeg → https://ffmpeg.org/documentation.html  
@@ -401,7 +508,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';'
 
 ---
 
-## **11. 🧾 License**
+## **12. 🧾 License**
 
 Released under the **MIT License**.  
 **Created by Aco Vidovic with AI assistance from ChatGPT.**  
