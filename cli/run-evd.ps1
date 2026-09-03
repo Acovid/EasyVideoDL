@@ -13,6 +13,10 @@
         - Best available M4A (Apple-friendly, no filename suffix)
    • Playlist or single video
    • Overwrite or skip existing files
+   • Optional subtitles:
+        - Preferred language (default: en, or all languages)
+        - Regular subtitles and optional auto-generated subtitles
+        - Separate SRT files
    • Logging to evd-log.txt:
         - Newest entries at TOP
         - Date banners, once per day
@@ -28,7 +32,10 @@ function Write-EvdLog {
         [bool]  $AudioOnly,
         [string]$AudioMode,
         [string]$QualityLabel,
-        [string]$OutDir
+        [string]$OutDir,
+        [bool]$SubtitlesEnabled,
+        [string]$SubtitleLangs,
+        [bool]$AutoSubtitles
     )
 
     $baseDir = Join-Path $OutDir "EasyVideoDL"
@@ -53,10 +60,23 @@ function Write-EvdLog {
         $type = "video:$QualityLabel"
     }
 
+    if ($SubtitlesEnabled) {
+        $subtitlesLabel = "yes"
+        $subtitleLangsLabel = $SubtitleLangs
+        if ($AutoSubtitles) { $autoSubtitlesLabel = "yes" } else { $autoSubtitlesLabel = "no" }
+    } else {
+        $subtitlesLabel = "no"
+        $subtitleLangsLabel = "n/a"
+        $autoSubtitlesLabel = "n/a"
+    }
+
     $entryBlock = @(
         "[$tsStr]"
         "MODE=$mode"
         "TYPE=$type"
+        "SUBTITLES=$subtitlesLabel"
+        "SUBTITLE_LANGS=$subtitleLangsLabel"
+        "AUTO_SUBTITLES=$autoSubtitlesLabel"
         "OUT=$baseDir"
         "URL=$Url"
     )
@@ -126,7 +146,11 @@ function Invoke-EvdDownload {
         [bool]  $AudioOnly,
         [string]$AudioMode,
         [string]$QualityLabel,
-        [string[]]$AudioQualityFlags
+        [string[]]$AudioQualityFlags,
+        [string[]]$SubtitleFlags,
+        [bool]$SubtitlesEnabled,
+        [string]$SubtitleLangs,
+        [bool]$AutoSubtitles
     )
 
     $evdBase = Join-Path $OutDir "EasyVideoDL"
@@ -144,7 +168,13 @@ function Invoke-EvdDownload {
         $args += $OverwriteFlag
     }
 
-    $args += @("--cookies", "`"$Cookies`"", "-f", "`"$Format`"")
+    $args += @("--cookies", "`"$Cookies`"")
+
+    if ($SubtitleFlags -and $SubtitleFlags.Count -gt 0) {
+        $args += $SubtitleFlags
+    }
+
+    $args += @("-f", "`"$Format`"")
 
     if ($IsPl -match '^[yY]$') {
         Write-Host "Mode: Playlist download" -ForegroundColor Cyan
@@ -215,7 +245,52 @@ function Invoke-EvdDownload {
     Write-Host "Download completed." -ForegroundColor Green
     Write-Host "Files saved to: $OutDir\EasyVideoDL"
 
-    Write-EvdLog -Url $Url -IsPl $IsPl -AudioOnly:$AudioOnly -AudioMode $AudioMode -QualityLabel $QualityLabel -OutDir $OutDir
+    Write-EvdLog -Url $Url -IsPl $IsPl -AudioOnly:$AudioOnly -AudioMode $AudioMode -QualityLabel $QualityLabel -OutDir $OutDir -SubtitlesEnabled:$SubtitlesEnabled -SubtitleLangs $SubtitleLangs -AutoSubtitles:$AutoSubtitles
+}
+
+# ---------------------- Subtitle selection helper -----------------------------
+function Set-EvdSubtitleOptions {
+    $script:SubtitlesEnabled = $false
+    $script:SubtitleLangs = "n/a"
+    $script:AutoSubtitles = $false
+    $script:SubtitleFlags = @()
+
+    Write-Host ""
+    $SubChoice = Read-Host "Download subtitles if available? [y/N]"
+
+    if ($SubChoice -match '^[yY]$') {
+        $script:SubtitlesEnabled = $true
+
+        $Langs = Read-Host "Preferred subtitle language [en] (or 'all' for all languages)"
+        if ([string]::IsNullOrWhiteSpace($Langs)) { $Langs = "en" }
+        $script:SubtitleLangs = $Langs
+
+        $AutoChoice = Read-Host "Include auto-generated subtitles if available? [y/N]"
+        if ($AutoChoice -match '^[yY]$') {
+            $script:AutoSubtitles = $true
+        }
+
+        $script:SubtitleFlags = @(
+            "--write-subs",
+            "--sub-langs", "`"$Langs`"",
+            "--convert-subs", "srt"
+        )
+
+        if ($script:AutoSubtitles) {
+            $script:SubtitleFlags += "--write-auto-subs"
+        }
+
+        Write-Host "Subtitles will be downloaded as separate SRT files when available."
+        Write-Host "Subtitle language(s): $Langs"
+        if ($script:AutoSubtitles) {
+            Write-Host "Auto-generated subtitles are enabled."
+        } else {
+            Write-Host "Only regular subtitles will be requested."
+        }
+    } else {
+        Write-Host "Subtitles will not be downloaded."
+    }
+    Write-Host ""
 }
 
 # ---------------------- Mode selection banner --------------------------------
@@ -329,6 +404,9 @@ if ($ModeChoice -eq "2") {
         }
     }
 
+    # Optional subtitles (same settings apply to all URLs in batch)
+    Set-EvdSubtitleOptions
+
     Write-Host ""
     Write-Host "Reading URLs from: $UrlFile"
     Write-Host ""
@@ -365,7 +443,11 @@ if ($ModeChoice -eq "2") {
             -AudioOnly:$AudioOnly `
             -AudioMode $AudioMode `
             -QualityLabel $QualityLabel `
-            -AudioQualityFlags $AudioQualityFlags
+            -AudioQualityFlags $AudioQualityFlags `
+            -SubtitleFlags $SubtitleFlags `
+            -SubtitlesEnabled:$SubtitlesEnabled `
+            -SubtitleLangs $SubtitleLangs `
+            -AutoSubtitles:$AutoSubtitles
 
         $index++
     }
@@ -466,6 +548,9 @@ while ($true) {
         }
     }
 
+    # Optional subtitles
+    Set-EvdSubtitleOptions
+
     Invoke-EvdDownload `
         -Url $URL `
         -Cookies $Cookies `
@@ -476,7 +561,11 @@ while ($true) {
         -AudioOnly:$AudioOnly `
         -AudioMode $AudioMode `
         -QualityLabel $QualityLabel `
-        -AudioQualityFlags $AudioQualityFlags
+        -AudioQualityFlags $AudioQualityFlags `
+        -SubtitleFlags $SubtitleFlags `
+        -SubtitlesEnabled:$SubtitlesEnabled `
+        -SubtitleLangs $SubtitleLangs `
+        -AutoSubtitles:$AutoSubtitles
 
     $again = Read-Host "Do you want to download another video? [y/N]"
     if ($again -notmatch '^[yY]$') {

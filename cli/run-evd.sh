@@ -7,6 +7,8 @@
 #   Supports:
 #     - Video: best / 1080p / 720p / 480p
 #     - Audio only: MP3 (320/256/160/96 kbps) or best M4A (Apple-friendly)
+#     - Optional subtitles: preferred language, regular and auto-generated captions
+#       saved as separate SRT files when available
 #
 # Output naming:
 #   Video: "Title [QUALITY].ext"
@@ -79,10 +81,26 @@ log_download() {
   local today_human
   today_human="$(date +"%B %e, %Y")"
 
+  # Subtitle settings for the log
+  local subtitles_label auto_subtitles_label subtitle_langs_label
+  if [[ "${SUBTITLES_ENABLED:-0}" -eq 1 ]]; then
+    subtitles_label="yes"
+    subtitle_langs_label="${SUBTITLE_LANGS:-en}"
+    if [[ "${AUTO_SUBTITLES:-0}" -eq 1 ]]; then
+      auto_subtitles_label="yes"
+    else
+      auto_subtitles_label="no"
+    fi
+  else
+    subtitles_label="no"
+    subtitle_langs_label="n/a"
+    auto_subtitles_label="n/a"
+  fi
+
   # Multi-line entry block for this download
   local entry_block
-  printf -v entry_block '%s\nMODE=%s\nTYPE=%s\nOUT=%s\nURL=%s\n' \
-    "[$ts]" "$mode" "$type" "$base_dir" "$url"
+  printf -v entry_block '%s\nMODE=%s\nTYPE=%s\nSUBTITLES=%s\nSUBTITLE_LANGS=%s\nAUTO_SUBTITLES=%s\nOUT=%s\nURL=%s\n' \
+    "[$ts]" "$mode" "$type" "$subtitles_label" "$subtitle_langs_label" "$auto_subtitles_label" "$base_dir" "$url"
 
   # If log does not exist or is empty, create it with today's header and entry
   if [[ ! -s "$log_file" ]]; then
@@ -159,9 +177,66 @@ log_download() {
 }
 
 # -----------------------------------------------------------------------------
+# Helper function: configure subtitle download options
+#   - Subtitles are optional (default: no)
+#   - User can select a preferred language (default: en, or "all")
+#   - Regular subtitles are requested first
+#   - Auto-generated subtitles can also be requested
+#   - Subtitle files are converted to SRT and kept separate from the media file
+# -----------------------------------------------------------------------------
+configure_subtitles() {
+  SUBTITLES_ENABLED=0
+  SUBTITLE_LANGS="n/a"
+  AUTO_SUBTITLES=0
+  # Keep explicit disable flags so this array is never empty. This also avoids
+  # empty-array edge cases in the older Bash 3.2 shipped with macOS.
+  SUBTITLE_FLAGS=(--no-write-subs --no-write-auto-subs)
+
+  echo
+  read -r -p "Download subtitles if available? [y/N]: " SUB_CHOICE
+
+  case "$SUB_CHOICE" in
+    y|Y)
+      SUBTITLES_ENABLED=1
+
+      read -r -p "Preferred subtitle language [en] (or 'all' for all languages): " SUBTITLE_LANGS
+      SUBTITLE_LANGS="${SUBTITLE_LANGS:-en}"
+
+      read -r -p "Include auto-generated subtitles if available? [y/N]: " AUTO_SUB_CHOICE
+
+      SUBTITLE_FLAGS=(
+        --write-subs
+        --sub-langs "$SUBTITLE_LANGS"
+        --convert-subs srt
+      )
+
+      case "$AUTO_SUB_CHOICE" in
+        y|Y)
+          AUTO_SUBTITLES=1
+          SUBTITLE_FLAGS+=(--write-auto-subs)
+          ;;
+      esac
+
+      echo "Subtitles will be downloaded as separate SRT files when available."
+      echo "Subtitle language(s): $SUBTITLE_LANGS"
+      if [[ "$AUTO_SUBTITLES" -eq 1 ]]; then
+        echo "Auto-generated subtitles are enabled."
+      else
+        echo "Only regular subtitles will be requested."
+      fi
+      ;;
+    *)
+      echo "Subtitles will not be downloaded."
+      ;;
+  esac
+  echo
+}
+
+# -----------------------------------------------------------------------------
 # Helper function: run one download based on already-set variables:
 #   URL, COOKIES, OUTDIR, IS_PL, OVERWRITE_FLAG,
-#   AUDIO_ONLY, AUDIO_MODE, FORMAT, QUALITY_LABEL, AUDIO_QUALITY_FLAGS
+#   AUDIO_ONLY, AUDIO_MODE, FORMAT, QUALITY_LABEL, AUDIO_QUALITY_FLAGS,
+#   SUBTITLE_FLAGS
 # -----------------------------------------------------------------------------
 run_one_download() {
   local url="$URL"
@@ -179,6 +254,7 @@ run_one_download() {
     if [[ "$AUDIO_ONLY" -eq 1 ]]; then
       if [[ "$AUDIO_MODE" == "mp3" ]]; then
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
+          "${SUBTITLE_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
           -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
@@ -186,6 +262,7 @@ run_one_download() {
       else
         # m4a mode (no suffix)
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
+          "${SUBTITLE_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format m4a \
           -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s" \
@@ -193,6 +270,7 @@ run_one_download() {
       fi
     else
       yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
+        "${SUBTITLE_FLAGS[@]}" \
         -f "$FORMAT" \
         -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
         "$url"
@@ -203,6 +281,7 @@ run_one_download() {
     if [[ "$AUDIO_ONLY" -eq 1 ]]; then
       if [[ "$AUDIO_MODE" == "mp3" ]]; then
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
+          "${SUBTITLE_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
           -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
@@ -210,6 +289,7 @@ run_one_download() {
       else
         # m4a mode (no suffix)
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
+          "${SUBTITLE_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format m4a \
           -o "${OUTDIR}/EasyVideoDL/%(title)s.%(ext)s" \
@@ -217,6 +297,7 @@ run_one_download() {
       fi
     else
       yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
+        "${SUBTITLE_FLAGS[@]}" \
         -f "$FORMAT" \
         -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
         "$url"
@@ -355,6 +436,9 @@ if [[ "$MODE_CHOICE" == "2" ]]; then
       QUALITY_LABEL="best"
       ;;
   esac
+
+  # 5.1) Optional subtitles (same settings apply to all URLs in batch) --------
+  configure_subtitles
 
   echo
   echo "Reading URLs from: $URL_FILE"
@@ -526,6 +610,9 @@ while true; do
       QUALITY_LABEL="best"
       ;;
   esac
+
+  # 5.1) Optional subtitles ---------------------------------------------------
+  configure_subtitles
 
   # Run one download with the current settings
   run_one_download

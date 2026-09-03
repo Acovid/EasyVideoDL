@@ -389,6 +389,10 @@ Regardless of mode, EasyVideoDL will guide you through the following choices:
 7. **Audio quality (if audio-only)**
    - MP3: 320 / 256 / 160 / 96 kbps  
    - Best available M4A (Apple-friendly)
+8. **Download subtitles (optional)**
+   - Preferred subtitle language (default: `en`; use `all` for all available languages)
+   - Optionally include auto-generated subtitles
+   - Subtitles are converted to separate `.srt` files when available
 
 ---
 
@@ -421,6 +425,7 @@ This log records:
 - Date and time
 - Download mode (single / playlist)
 - Type and quality
+- Subtitle settings
 - Output location
 - Original URL
 
