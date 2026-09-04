@@ -389,10 +389,27 @@ Regardless of mode, EasyVideoDL will guide you through the following choices:
 7. **Audio quality (if audio-only)**
    - MP3: 320 / 256 / 160 / 96 kbps  
    - Best available M4A (Apple-friendly)
-8. **Download subtitles (optional)**
+8. **MP4 handling (video downloads only)**
+   - Keep the original format (default)
+   - Remux to MP4 when possible — fast and without quality loss
+   - Re-encode to MP4 when necessary — slower, but maximizes compatibility
+   - If the result is already MP4, yt-dlp does not perform an unnecessary conversion
+9. **Download subtitles (optional)**
    - Preferred subtitle language (default: `en`; use `all` for all available languages)
    - Optionally include auto-generated subtitles
    - Subtitles are converted to separate `.srt` files when available
+
+---
+
+#### Checking the available format before downloading
+
+To inspect the formats a site offers without downloading the video, run:
+
+```bash
+yt-dlp -F "VIDEO_URL"
+```
+
+The `EXT` column shows the container of each available format (`mp4`, `webm`, etc.). Note that when yt-dlp downloads separate video and audio streams and merges them, the final container can differ from the individual source formats. EasyVideoDL's MP4 remux/re-encode options therefore use yt-dlp's post-processing and only convert when necessary.
 
 ---
 
@@ -425,6 +442,7 @@ This log records:
 - Date and time
 - Download mode (single / playlist)
 - Type and quality
+- MP4 handling setting
 - Subtitle settings
 - Output location
 - Original URL

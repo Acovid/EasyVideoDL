@@ -13,6 +13,10 @@
         - Best available M4A (Apple-friendly, no filename suffix)
    • Playlist or single video
    • Overwrite or skip existing files
+   • Optional MP4 handling:
+        - Keep original format
+        - Remux to MP4 when possible (fast, no quality loss)
+        - Re-encode to MP4 when necessary (maximum compatibility)
    • Optional subtitles:
         - Preferred language (default: en, or all languages)
         - Regular subtitles and optional auto-generated subtitles
@@ -35,7 +39,8 @@ function Write-EvdLog {
         [string]$OutDir,
         [bool]$SubtitlesEnabled,
         [string]$SubtitleLangs,
-        [bool]$AutoSubtitles
+        [bool]$AutoSubtitles,
+        [string]$Mp4Mode = "keep"
     )
 
     $baseDir = Join-Path $OutDir "EasyVideoDL"
@@ -74,6 +79,7 @@ function Write-EvdLog {
         "[$tsStr]"
         "MODE=$mode"
         "TYPE=$type"
+        "MP4=$Mp4Mode"
         "SUBTITLES=$subtitlesLabel"
         "SUBTITLE_LANGS=$subtitleLangsLabel"
         "AUTO_SUBTITLES=$autoSubtitlesLabel"
@@ -148,6 +154,8 @@ function Invoke-EvdDownload {
         [string]$QualityLabel,
         [string[]]$AudioQualityFlags,
         [string[]]$SubtitleFlags,
+        [string[]]$Mp4Flags,
+        [string]$Mp4Mode,
         [bool]$SubtitlesEnabled,
         [string]$SubtitleLangs,
         [bool]$AutoSubtitles
@@ -172,6 +180,10 @@ function Invoke-EvdDownload {
 
     if ($SubtitleFlags -and $SubtitleFlags.Count -gt 0) {
         $args += $SubtitleFlags
+    }
+
+    if ($Mp4Flags -and $Mp4Flags.Count -gt 0) {
+        $args += $Mp4Flags
     }
 
     $args += @("-f", "`"$Format`"")
@@ -245,7 +257,39 @@ function Invoke-EvdDownload {
     Write-Host "Download completed." -ForegroundColor Green
     Write-Host "Files saved to: $OutDir\EasyVideoDL"
 
-    Write-EvdLog -Url $Url -IsPl $IsPl -AudioOnly:$AudioOnly -AudioMode $AudioMode -QualityLabel $QualityLabel -OutDir $OutDir -SubtitlesEnabled:$SubtitlesEnabled -SubtitleLangs $SubtitleLangs -AutoSubtitles:$AutoSubtitles
+    Write-EvdLog -Url $Url -IsPl $IsPl -AudioOnly:$AudioOnly -AudioMode $AudioMode -QualityLabel $QualityLabel -OutDir $OutDir -SubtitlesEnabled:$SubtitlesEnabled -SubtitleLangs $SubtitleLangs -AutoSubtitles:$AutoSubtitles -Mp4Mode $Mp4Mode
+}
+
+# ---------------------- MP4 handling helper ----------------------------------
+function Set-EvdMp4Options {
+    $script:Mp4Mode = "keep"
+    $script:Mp4Flags = @()
+
+    if ($AudioOnly) { return }
+
+    Write-Host ""
+    Write-Host "MP4 handling:"
+    Write-Host "  1) Keep original format [default]"
+    Write-Host "  2) Remux to MP4 when possible (fast, no quality loss)"
+    Write-Host "  3) Re-encode to MP4 when necessary (slower, maximum compatibility)"
+    $Mp4Choice = Read-Host "Enter choice [1-3, default 1]"
+    if ([string]::IsNullOrWhiteSpace($Mp4Choice)) { $Mp4Choice = "1" }
+
+    switch ($Mp4Choice) {
+        "2" {
+            $script:Mp4Mode = "remux"
+            $script:Mp4Flags = @("--remux-video", "mp4")
+            Write-Host "MP4 remux enabled. If the codecs are MP4-compatible, no re-encoding is performed."
+        }
+        "3" {
+            $script:Mp4Mode = "recode"
+            $script:Mp4Flags = @("--recode-video", "mp4")
+            Write-Host "MP4 re-encoding enabled when necessary."
+        }
+        default {
+            Write-Host "Original video format will be kept."
+        }
+    }
 }
 
 # ---------------------- Subtitle selection helper -----------------------------
@@ -405,6 +449,7 @@ if ($ModeChoice -eq "2") {
     }
 
     # Optional subtitles (same settings apply to all URLs in batch)
+    Set-EvdMp4Options
     Set-EvdSubtitleOptions
 
     Write-Host ""
@@ -445,6 +490,8 @@ if ($ModeChoice -eq "2") {
             -QualityLabel $QualityLabel `
             -AudioQualityFlags $AudioQualityFlags `
             -SubtitleFlags $SubtitleFlags `
+            -Mp4Flags $Mp4Flags `
+            -Mp4Mode $Mp4Mode `
             -SubtitlesEnabled:$SubtitlesEnabled `
             -SubtitleLangs $SubtitleLangs `
             -AutoSubtitles:$AutoSubtitles
@@ -549,6 +596,7 @@ while ($true) {
     }
 
     # Optional subtitles
+    Set-EvdMp4Options
     Set-EvdSubtitleOptions
 
     Invoke-EvdDownload `
@@ -563,6 +611,8 @@ while ($true) {
         -QualityLabel $QualityLabel `
         -AudioQualityFlags $AudioQualityFlags `
         -SubtitleFlags $SubtitleFlags `
+        -Mp4Flags $Mp4Flags `
+        -Mp4Mode $Mp4Mode `
         -SubtitlesEnabled:$SubtitlesEnabled `
         -SubtitleLangs $SubtitleLangs `
         -AutoSubtitles:$AutoSubtitles

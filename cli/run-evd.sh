@@ -7,6 +7,7 @@
 #   Supports:
 #     - Video: best / 1080p / 720p / 480p
 #     - Audio only: MP3 (320/256/160/96 kbps) or best M4A (Apple-friendly)
+#     - Optional MP4 handling: keep original, remux to MP4, or re-encode to MP4
 #     - Optional subtitles: preferred language, regular and auto-generated captions
 #       saved as separate SRT files when available
 #
@@ -99,8 +100,8 @@ log_download() {
 
   # Multi-line entry block for this download
   local entry_block
-  printf -v entry_block '%s\nMODE=%s\nTYPE=%s\nSUBTITLES=%s\nSUBTITLE_LANGS=%s\nAUTO_SUBTITLES=%s\nOUT=%s\nURL=%s\n' \
-    "[$ts]" "$mode" "$type" "$subtitles_label" "$subtitle_langs_label" "$auto_subtitles_label" "$base_dir" "$url"
+  printf -v entry_block '%s\nMODE=%s\nTYPE=%s\nMP4=%s\nSUBTITLES=%s\nSUBTITLE_LANGS=%s\nAUTO_SUBTITLES=%s\nOUT=%s\nURL=%s\n' \
+    "[$ts]" "$mode" "$type" "${MP4_MODE:-keep}" "$subtitles_label" "$subtitle_langs_label" "$auto_subtitles_label" "$base_dir" "$url"
 
   # If log does not exist or is empty, create it with today's header and entry
   if [[ ! -s "$log_file" ]]; then
@@ -233,10 +234,48 @@ configure_subtitles() {
 }
 
 # -----------------------------------------------------------------------------
+# Helper function: configure MP4 handling
+#   Applies only to video downloads. yt-dlp/ffmpeg performs the operation only
+#   when necessary, so an already-MP4 result is left as MP4.
+# -----------------------------------------------------------------------------
+configure_mp4() {
+  MP4_MODE="keep"
+  MP4_FLAGS=(--no-keep-video)
+
+  if [[ "$AUDIO_ONLY" -eq 1 ]]; then
+    return
+  fi
+
+  echo
+  echo "MP4 handling:"
+  echo "  1) Keep original format [default]"
+  echo "  2) Remux to MP4 when possible (fast, no quality loss)"
+  echo "  3) Re-encode to MP4 when necessary (slower, maximum compatibility)"
+  read -r -p "Enter choice [1-3, default 1]: " MP4_CHOICE
+  MP4_CHOICE="${MP4_CHOICE:-1}"
+
+  case "$MP4_CHOICE" in
+    2)
+      MP4_MODE="remux"
+      MP4_FLAGS=(--remux-video mp4)
+      echo "MP4 remux enabled. If the codecs are MP4-compatible, no re-encoding is performed."
+      ;;
+    3)
+      MP4_MODE="recode"
+      MP4_FLAGS=(--recode-video mp4)
+      echo "MP4 re-encoding enabled when necessary."
+      ;;
+    *)
+      echo "Original video format will be kept."
+      ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
 # Helper function: run one download based on already-set variables:
 #   URL, COOKIES, OUTDIR, IS_PL, OVERWRITE_FLAG,
 #   AUDIO_ONLY, AUDIO_MODE, FORMAT, QUALITY_LABEL, AUDIO_QUALITY_FLAGS,
-#   SUBTITLE_FLAGS
+#   MP4_FLAGS, SUBTITLE_FLAGS
 # -----------------------------------------------------------------------------
 run_one_download() {
   local url="$URL"
@@ -255,6 +294,7 @@ run_one_download() {
       if [[ "$AUDIO_MODE" == "mp3" ]]; then
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
           "${SUBTITLE_FLAGS[@]}" \
+          "${MP4_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
           -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
@@ -263,6 +303,7 @@ run_one_download() {
         # m4a mode (no suffix)
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
           "${SUBTITLE_FLAGS[@]}" \
+          "${MP4_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format m4a \
           -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s" \
@@ -271,6 +312,7 @@ run_one_download() {
     else
       yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
         "${SUBTITLE_FLAGS[@]}" \
+        "${MP4_FLAGS[@]}" \
         -f "$FORMAT" \
         -o "${OUTDIR}/EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s [${QUALITY_LABEL}].%(ext)s" \
         "$url"
@@ -282,6 +324,7 @@ run_one_download() {
       if [[ "$AUDIO_MODE" == "mp3" ]]; then
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
           "${SUBTITLE_FLAGS[@]}" \
+          "${MP4_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format mp3 "${AUDIO_QUALITY_FLAGS[@]}" \
           -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
@@ -290,6 +333,7 @@ run_one_download() {
         # m4a mode (no suffix)
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
           "${SUBTITLE_FLAGS[@]}" \
+          "${MP4_FLAGS[@]}" \
           -f "$FORMAT" \
           --extract-audio --audio-format m4a \
           -o "${OUTDIR}/EasyVideoDL/%(title)s.%(ext)s" \
@@ -298,6 +342,7 @@ run_one_download() {
     else
       yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" \
         "${SUBTITLE_FLAGS[@]}" \
+        "${MP4_FLAGS[@]}" \
         -f "$FORMAT" \
         -o "${OUTDIR}/EasyVideoDL/%(title)s [${QUALITY_LABEL}].%(ext)s" \
         "$url"
@@ -437,7 +482,10 @@ if [[ "$MODE_CHOICE" == "2" ]]; then
       ;;
   esac
 
-  # 5.1) Optional subtitles (same settings apply to all URLs in batch) --------
+  # 5.1) Optional MP4 handling (same setting applies to all URLs in batch) ----
+  configure_mp4
+
+  # 5.2) Optional subtitles (same settings apply to all URLs in batch) --------
   configure_subtitles
 
   echo
@@ -611,7 +659,10 @@ while true; do
       ;;
   esac
 
-  # 5.1) Optional subtitles ---------------------------------------------------
+  # 5.1) Optional MP4 handling ------------------------------------------------
+  configure_mp4
+
+  # 5.2) Optional subtitles ---------------------------------------------------
   configure_subtitles
 
   # Run one download with the current settings
