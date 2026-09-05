@@ -40,7 +40,9 @@ function Write-EvdLog {
         [bool]$SubtitlesEnabled,
         [string]$SubtitleLangs,
         [bool]$AutoSubtitles,
-        [string]$Mp4Mode = "keep"
+        [string]$Mp4Mode = "keep",
+        [string]$PlaylistStart = "1",
+        [string]$PlaylistEnd = ""
     )
 
     $baseDir = Join-Path $OutDir "EasyVideoDL"
@@ -79,6 +81,7 @@ function Write-EvdLog {
         "[$tsStr]"
         "MODE=$mode"
         "TYPE=$type"
+        "PLAYLIST_RANGE=$(if ($mode -eq 'playlist') { if ([string]::IsNullOrWhiteSpace($PlaylistEnd)) { "$PlaylistStart-last" } else { "$PlaylistStart-$PlaylistEnd" } } else { 'n/a' })"
         "MP4=$Mp4Mode"
         "SUBTITLES=$subtitlesLabel"
         "SUBTITLE_LANGS=$subtitleLangsLabel"
@@ -158,7 +161,9 @@ function Invoke-EvdDownload {
         [string]$Mp4Mode,
         [bool]$SubtitlesEnabled,
         [string]$SubtitleLangs,
-        [bool]$AutoSubtitles
+        [bool]$AutoSubtitles,
+        [string]$PlaylistStart = "1",
+        [string]$PlaylistEnd = ""
     )
 
     $evdBase = Join-Path $OutDir "EasyVideoDL"
@@ -191,6 +196,10 @@ function Invoke-EvdDownload {
     if ($IsPl -match '^[yY]$') {
         Write-Host "Mode: Playlist download" -ForegroundColor Cyan
         $args += "--yes-playlist"
+        $args += @("--playlist-start", $PlaylistStart)
+        if (-not [string]::IsNullOrWhiteSpace($PlaylistEnd)) {
+            $args += @("--playlist-end", $PlaylistEnd)
+        }
 
         if ($AudioOnly) {
             if ($AudioMode -eq "mp3") {
@@ -257,7 +266,40 @@ function Invoke-EvdDownload {
     Write-Host "Download completed." -ForegroundColor Green
     Write-Host "Files saved to: $OutDir\EasyVideoDL"
 
-    Write-EvdLog -Url $Url -IsPl $IsPl -AudioOnly:$AudioOnly -AudioMode $AudioMode -QualityLabel $QualityLabel -OutDir $OutDir -SubtitlesEnabled:$SubtitlesEnabled -SubtitleLangs $SubtitleLangs -AutoSubtitles:$AutoSubtitles -Mp4Mode $Mp4Mode
+    Write-EvdLog -Url $Url -IsPl $IsPl -AudioOnly:$AudioOnly -AudioMode $AudioMode -QualityLabel $QualityLabel -OutDir $OutDir -SubtitlesEnabled:$SubtitlesEnabled -SubtitleLangs $SubtitleLangs -AutoSubtitles:$AutoSubtitles -Mp4Mode $Mp4Mode -PlaylistStart $PlaylistStart -PlaylistEnd $PlaylistEnd
+}
+
+# ---------------------- Playlist range helper --------------------------------
+function Set-EvdPlaylistRange {
+    $script:PlaylistStart = "1"
+    $script:PlaylistEnd = ""
+
+    if ($IsPl -notmatch '^[yY]$') { return }
+
+    while ($true) {
+        $value = Read-Host "First video to download [default: 1]"
+        if ([string]::IsNullOrWhiteSpace($value)) { $value = "1" }
+        $parsed = 0
+        if ([int]::TryParse($value, [ref]$parsed) -and $parsed -ge 1) {
+            $script:PlaylistStart = $parsed.ToString()
+            break
+        }
+        Write-Host "Please enter a positive whole number." -ForegroundColor Yellow
+    }
+
+    while ($true) {
+        $value = Read-Host "Last video to download [default: last]"
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            $script:PlaylistEnd = ""
+            break
+        }
+        $parsed = 0
+        if ([int]::TryParse($value, [ref]$parsed) -and $parsed -ge [int]$script:PlaylistStart) {
+            $script:PlaylistEnd = $parsed.ToString()
+            break
+        }
+        Write-Host "Please enter a positive whole number not smaller than the first video, or press ENTER for the last video." -ForegroundColor Yellow
+    }
 }
 
 # ---------------------- MP4 handling helper ----------------------------------
@@ -375,6 +417,7 @@ if ($ModeChoice -eq "2") {
 
     # Playlist flag (applies to all URLs in this batch)
     $IsPl = Read-Host "Are these URLs playlists (courses with multiple videos)? [y/N]"
+    Set-EvdPlaylistRange
 
     # Overwrite / skip
     Write-Host ""
@@ -494,7 +537,9 @@ if ($ModeChoice -eq "2") {
             -Mp4Mode $Mp4Mode `
             -SubtitlesEnabled:$SubtitlesEnabled `
             -SubtitleLangs $SubtitleLangs `
-            -AutoSubtitles:$AutoSubtitles
+            -AutoSubtitles:$AutoSubtitles `
+            -PlaylistStart $PlaylistStart `
+            -PlaylistEnd $PlaylistEnd
 
         $index++
     }
@@ -524,6 +569,7 @@ while ($true) {
     if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = $DefaultOut }
 
     $IsPl = Read-Host "Is this a playlist (course with multiple videos)? [y/N]"
+    Set-EvdPlaylistRange
 
     Write-Host ""
     Write-Host "If a file with the same name already exists:"
@@ -615,7 +661,9 @@ while ($true) {
         -Mp4Mode $Mp4Mode `
         -SubtitlesEnabled:$SubtitlesEnabled `
         -SubtitleLangs $SubtitleLangs `
-        -AutoSubtitles:$AutoSubtitles
+        -AutoSubtitles:$AutoSubtitles `
+        -PlaylistStart $PlaylistStart `
+        -PlaylistEnd $PlaylistEnd
 
     $again = Read-Host "Do you want to download another video? [y/N]"
     if ($again -notmatch '^[yY]$') {

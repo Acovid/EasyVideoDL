@@ -380,21 +380,25 @@ Regardless of mode, EasyVideoDL will guide you through the following choices:
 2. **Cookies file** (`cookies.txt`) for login-protected sites
 3. **Output folder** (default is `~/Downloads`)
 4. **Playlist or single video**
-5. **If a file already exists**
+5. **Playlist range (playlist downloads only)**
+   - First video to download (default: `1`)
+   - Last video to download (default: last video in the playlist)
+   - Useful for resuming a long playlist with a fresh cookies file, for example videos `46` through the end
+6. **If a file already exists**
    - Skip existing files  
    - Overwrite existing files
-6. **Download type**
+7. **Download type**
    - Video (best / 1080p / 720p / 480p)
    - Audio only
-7. **Audio quality (if audio-only)**
+8. **Audio quality (if audio-only)**
    - MP3: 320 / 256 / 160 / 96 kbps  
    - Best available M4A (Apple-friendly)
-8. **MP4 handling (video downloads only)**
+9. **MP4 handling (video downloads only)**
    - Keep the original format (default)
    - Remux to MP4 when possible — fast and without quality loss
    - Re-encode to MP4 when necessary — slower, but maximizes compatibility
    - If the result is already MP4, yt-dlp does not perform an unnecessary conversion
-9. **Download subtitles (optional)**
+10. **Download subtitles (optional)**
    - Preferred subtitle language (default: `en`; use `all` for all available languages)
    - Optionally include auto-generated subtitles
    - Subtitles are converted to separate `.srt` files when available
@@ -441,6 +445,7 @@ A **human-readable log file** is also created:
 This log records:
 - Date and time
 - Download mode (single / playlist)
+- Playlist range (for playlist downloads)
 - Type and quality
 - MP4 handling setting
 - Subtitle settings
@@ -479,6 +484,7 @@ yt-dlp --cookies cookies.txt -f "bestvideo+bestaudio/best" \
 ```bash
 # Playlist
 yt-dlp --cookies cookies.txt --yes-playlist \
+  --playlist-start 1 --playlist-end 20 \
   -f "bestvideo+bestaudio/best" \
   -o "EasyVideoDL/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s" \
   "URL"

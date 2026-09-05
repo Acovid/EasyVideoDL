@@ -100,8 +100,13 @@ log_download() {
 
   # Multi-line entry block for this download
   local entry_block
-  printf -v entry_block '%s\nMODE=%s\nTYPE=%s\nMP4=%s\nSUBTITLES=%s\nSUBTITLE_LANGS=%s\nAUTO_SUBTITLES=%s\nOUT=%s\nURL=%s\n' \
-    "[$ts]" "$mode" "$type" "${MP4_MODE:-keep}" "$subtitles_label" "$subtitle_langs_label" "$auto_subtitles_label" "$base_dir" "$url"
+  local playlist_range_label="n/a"
+  if [[ "$mode" == "playlist" ]]; then
+    playlist_range_label="${PLAYLIST_START:-1}-${PLAYLIST_END:-last}"
+  fi
+
+  printf -v entry_block '%s\nMODE=%s\nTYPE=%s\nPLAYLIST_RANGE=%s\nMP4=%s\nSUBTITLES=%s\nSUBTITLE_LANGS=%s\nAUTO_SUBTITLES=%s\nOUT=%s\nURL=%s\n' \
+    "[$ts]" "$mode" "$type" "$playlist_range_label" "${MP4_MODE:-keep}" "$subtitles_label" "$subtitle_langs_label" "$auto_subtitles_label" "$base_dir" "$url"
 
   # If log does not exist or is empty, create it with today's header and entry
   if [[ ! -s "$log_file" ]]; then
@@ -272,6 +277,39 @@ configure_mp4() {
 }
 
 # -----------------------------------------------------------------------------
+# Helper function: configure an optional playlist range.
+# Defaults: first item = 1; last item = end of playlist.
+# -----------------------------------------------------------------------------
+set_playlist_range() {
+  PLAYLIST_START="1"
+  PLAYLIST_END=""
+  PLAYLIST_FLAGS=()
+
+  if [[ "${IS_PL}" != "y" && "${IS_PL}" != "Y" ]]; then
+    return
+  fi
+
+  while true; do
+    read -r -p "First video to download [default: 1]: " PLAYLIST_START
+    PLAYLIST_START="${PLAYLIST_START:-1}"
+    if [[ "$PLAYLIST_START" =~ ^[1-9][0-9]*$ ]]; then break; fi
+    echo "Please enter a positive whole number."
+  done
+
+  while true; do
+    read -r -p "Last video to download [default: last]: " PLAYLIST_END
+    if [[ -z "$PLAYLIST_END" ]]; then break; fi
+    if [[ "$PLAYLIST_END" =~ ^[1-9][0-9]*$ ]] && (( PLAYLIST_END >= PLAYLIST_START )); then break; fi
+    echo "Please enter a positive whole number not smaller than the first video, or press ENTER for the last video."
+  done
+
+  PLAYLIST_FLAGS=(--playlist-start "$PLAYLIST_START")
+  if [[ -n "$PLAYLIST_END" ]]; then
+    PLAYLIST_FLAGS+=(--playlist-end "$PLAYLIST_END")
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # Helper function: run one download based on already-set variables:
 #   URL, COOKIES, OUTDIR, IS_PL, OVERWRITE_FLAG,
 #   AUDIO_ONLY, AUDIO_MODE, FORMAT, QUALITY_LABEL, AUDIO_QUALITY_FLAGS,
@@ -293,6 +331,7 @@ run_one_download() {
     if [[ "$AUDIO_ONLY" -eq 1 ]]; then
       if [[ "$AUDIO_MODE" == "mp3" ]]; then
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
+          "${PLAYLIST_FLAGS[@]}" \
           "${SUBTITLE_FLAGS[@]}" \
           "${MP4_FLAGS[@]}" \
           -f "$FORMAT" \
@@ -302,6 +341,7 @@ run_one_download() {
       else
         # m4a mode (no suffix)
         yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
+          "${PLAYLIST_FLAGS[@]}" \
           "${SUBTITLE_FLAGS[@]}" \
           "${MP4_FLAGS[@]}" \
           -f "$FORMAT" \
@@ -311,6 +351,7 @@ run_one_download() {
       fi
     else
       yt-dlp $OVERWRITE_FLAG --cookies "$COOKIES" --yes-playlist \
+        "${PLAYLIST_FLAGS[@]}" \
         "${SUBTITLE_FLAGS[@]}" \
         "${MP4_FLAGS[@]}" \
         -f "$FORMAT" \
@@ -385,6 +426,7 @@ if [[ "$MODE_CHOICE" == "2" ]]; then
   # Playlist flag for all URLs in this batch
   echo "Are these URLs playlists (courses with multiple videos)? [y/N]"
   read -r IS_PL
+  set_playlist_range
 
   # Overwrite / skip (once)
   echo
@@ -562,6 +604,7 @@ while true; do
   # 4) Playlist or single video? --------------------------------------------
   echo "Is this a playlist (course with multiple videos)? [y/N]"
   read -r IS_PL
+  set_playlist_range
 
   # 4.1) Overwrite or skip existing files? -----------------------------------
   echo
